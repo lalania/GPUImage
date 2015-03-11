@@ -377,12 +377,15 @@ NSString *const kGPUImageColorSwizzlingFragmentShaderString = SHADER_STRING
         if (CMTIME_IS_INVALID(startTime))
         {
             runSynchronouslyOnContextQueue(_movieWriterContext, ^{
-                if ((audioInputReadyCallback == NULL) && (assetWriter.status != AVAssetWriterStatusWriting))
+                if (CMTIME_IS_INVALID(startTime))
                 {
-                    [assetWriter startWriting];
+                    if ((audioInputReadyCallback == NULL) && (assetWriter.status != AVAssetWriterStatusWriting))
+                    {
+                        [assetWriter startWriting];
+                    }
+                    [assetWriter startSessionAtSourceTime:currentSampleTime];
+                    startTime = currentSampleTime;
                 }
-                [assetWriter startSessionAtSourceTime:currentSampleTime];
-                startTime = currentSampleTime;
             });
         }
 
@@ -466,11 +469,13 @@ NSString *const kGPUImageColorSwizzlingFragmentShaderString = SHADER_STRING
 {
     if (videoInputReadyCallback != NULL)
     {
-        if( assetWriter.status != AVAssetWriterStatusWriting )
-        {
-            [assetWriter startWriting];
-        }
-        videoQueue = dispatch_queue_create("com.sunsetlakesoftware.GPUImage.videoReadingQueue", NULL);
+        runSynchronouslyOnContextQueue(_movieWriterContext, ^{
+            if( assetWriter.status != AVAssetWriterStatusWriting )
+            {
+                [assetWriter startWriting];
+            }
+        });
+        videoQueue = dispatch_queue_create("com.sunsetlakesoftware.GPUImage.videoReadingQueue", DISPATCH_QUEUE_SERIAL);
         [assetWriterVideoInput requestMediaDataWhenReadyOnQueue:videoQueue usingBlock:^{
             if( _paused )
             {
@@ -499,7 +504,7 @@ NSString *const kGPUImageColorSwizzlingFragmentShaderString = SHADER_STRING
     
     if (audioInputReadyCallback != NULL)
     {
-        audioQueue = dispatch_queue_create("com.sunsetlakesoftware.GPUImage.audioReadingQueue", NULL);
+        audioQueue = dispatch_queue_create("com.sunsetlakesoftware.GPUImage.audioReadingQueue", DISPATCH_QUEUE_SERIAL);
         [assetWriterAudioInput requestMediaDataWhenReadyOnQueue:audioQueue usingBlock:^{
             if( _paused )
             {
@@ -683,13 +688,16 @@ NSString *const kGPUImageColorSwizzlingFragmentShaderString = SHADER_STRING
     if (CMTIME_IS_INVALID(startTime))
     {
         runSynchronouslyOnContextQueue(_movieWriterContext, ^{
-            if ((videoInputReadyCallback == NULL) && (assetWriter.status != AVAssetWriterStatusWriting))
+            if (CMTIME_IS_INVALID(startTime))
             {
-                [assetWriter startWriting];
+                if ((videoInputReadyCallback == NULL) && (assetWriter.status != AVAssetWriterStatusWriting))
+                {
+                    [assetWriter startWriting];
+                }
+                
+                [assetWriter startSessionAtSourceTime:frameTime];
+                startTime = frameTime;
             }
-            
-            [assetWriter startSessionAtSourceTime:frameTime];
-            startTime = frameTime;
         });
     }
 
@@ -749,7 +757,7 @@ NSString *const kGPUImageColorSwizzlingFragmentShaderString = SHADER_STRING
             }
             else
             {
-                NSLog(@"Couldn't write a frame");
+                NSLog(@"Couldn't write a frame (assetWriter.status: %i, err=%@)", self.assetWriter.status, self.assetWriter.error);
                 //NSLog(@"Wrote a video frame: %@", CFBridgingRelease(CMTimeCopyDescription(kCFAllocatorDefault, frameTime)));
             }
             CVPixelBufferUnlockBaseAddress(pixel_buffer, 0);
