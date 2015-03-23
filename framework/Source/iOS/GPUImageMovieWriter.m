@@ -757,7 +757,7 @@ NSString *const kGPUImageColorSwizzlingFragmentShaderString = SHADER_STRING
             }
             else
             {
-                NSLog(@"Couldn't write a frame (assetWriter.status: %i, err=%@)", self.assetWriter.status, self.assetWriter.error);
+                NSLog(@"Couldn't write a frame (assetWriter.status: %li, err=%@)", (signed long)self.assetWriter.status, self.assetWriter.error);
                 //NSLog(@"Wrote a video frame: %@", CFBridgingRelease(CMTimeCopyDescription(kCFAllocatorDefault, frameTime)));
             }
             CVPixelBufferUnlockBaseAddress(pixel_buffer, 0);
