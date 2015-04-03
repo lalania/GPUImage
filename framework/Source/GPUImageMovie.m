@@ -250,8 +250,8 @@
         return;
     }
 
-    __unsafe_unretained GPUImageMovie *weakSelf = self;
-
+    //__unsafe_unretained GPUImageMovie *weakSelf = self;
+    __weak GPUImageMovie *weakSelf = self;
     if (synchronizedMovieWriter != nil)
     {
         [synchronizedMovieWriter setVideoInputReadyCallback:^{
@@ -336,11 +336,13 @@
 	CMTime outputItemTime = [playerItemOutput itemTimeForHostTime:nextVSync];
 
 	if ([playerItemOutput hasNewPixelBufferForItemTime:outputItemTime]) {
-        __unsafe_unretained GPUImageMovie *weakSelf = self;
+        //__unsafe_unretained GPUImageMovie *weakSelf = self;
+        __weak GPUImageMovie *weakSelf = self;
 		CVPixelBufferRef pixelBuffer = [playerItemOutput copyPixelBufferForItemTime:outputItemTime itemTimeForDisplay:NULL];
         if( pixelBuffer )
             runSynchronouslyOnVideoProcessingQueue(^{
-                [weakSelf processMovieFrame:pixelBuffer withSampleTime:outputItemTime];
+                GPUImageMovie *strongSelf = weakSelf;
+                [strongSelf processMovieFrame:pixelBuffer withSampleTime:outputItemTime];
                 CFRelease(pixelBuffer);
             });
 	}
@@ -373,9 +375,11 @@
                 previousActualFrameTime = CFAbsoluteTimeGetCurrent();
             }
 
-            __unsafe_unretained GPUImageMovie *weakSelf = self;
+            //__unsafe_unretained GPUImageMovie *weakSelf = self;
+            __weak GPUImageMovie *weakSelf = self;
             runSynchronouslyOnVideoProcessingQueue(^{
-                [weakSelf processMovieFrame:sampleBufferRef];
+                GPUImageMovie *strongSelf = weakSelf;
+                [strongSelf processMovieFrame:sampleBufferRef];
                 CMSampleBufferInvalidate(sampleBufferRef);
                 CFRelease(sampleBufferRef);
             });

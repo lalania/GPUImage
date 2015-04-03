@@ -7,7 +7,9 @@ void runOnMainQueueWithoutDeadlocking(void (^block)(void))
 {
 	if ([NSThread isMainThread])
 	{
-		block();
+        @autoreleasepool {
+            block();
+        }
 	}
 	else
 	{
@@ -27,7 +29,9 @@ void runSynchronouslyOnVideoProcessingQueue(void (^block)(void))
 	if (dispatch_get_specific([GPUImageContext contextKey]))
 #endif
 	{
-		block();
+        @autoreleasepool {
+            block();
+        }
 	}else
 	{
 		dispatch_sync(videoProcessingQueue, block);
@@ -47,7 +51,9 @@ void runAsynchronouslyOnVideoProcessingQueue(void (^block)(void))
     if (dispatch_get_specific([GPUImageContext contextKey]))
 #endif
 	{
-		block();
+        @autoreleasepool {
+            block();
+        }
 	}else
 	{
 		dispatch_async(videoProcessingQueue, block);
@@ -66,7 +72,9 @@ void runSynchronouslyOnContextQueue(GPUImageContext *context, void (^block)(void
         if (dispatch_get_specific([GPUImageContext contextKey]))
 #endif
         {
-            block();
+            @autoreleasepool {
+                block();
+            }
         }else
         {
             dispatch_sync(videoProcessingQueue, block);
@@ -86,7 +94,9 @@ void runAsynchronouslyOnContextQueue(GPUImageContext *context, void (^block)(voi
         if (dispatch_get_specific([GPUImageContext contextKey]))
 #endif
         {
-            block();
+            @autoreleasepool {
+                block();
+            }
         }else
         {
             dispatch_async(videoProcessingQueue, block);
