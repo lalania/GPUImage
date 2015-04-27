@@ -470,7 +470,7 @@ NSString *const kGPUImageColorSwizzlingFragmentShaderString = SHADER_STRING
     if (videoInputReadyCallback != NULL)
     {
         runSynchronouslyOnContextQueue(_movieWriterContext, ^{
-            if( assetWriter.status != AVAssetWriterStatusWriting )
+            if( assetWriter.status != AVAssetWriterStatusWriting && assetWriter.status <= AVAssetWriterStatusCompleted)
             {
                 [assetWriter startWriting];
             }
@@ -690,7 +690,7 @@ NSString *const kGPUImageColorSwizzlingFragmentShaderString = SHADER_STRING
         runSynchronouslyOnContextQueue(_movieWriterContext, ^{
             if (CMTIME_IS_INVALID(startTime))
             {
-                if ((videoInputReadyCallback == NULL) && (assetWriter.status != AVAssetWriterStatusWriting))
+                if ((videoInputReadyCallback == NULL) && (assetWriter.status != AVAssetWriterStatusWriting && assetWriter.status <= AVAssetWriterStatusCompleted))
                 {
                     [assetWriter startWriting];
                 }
