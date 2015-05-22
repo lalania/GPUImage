@@ -680,7 +680,8 @@
     keepLooping = NO;
     [displayLink setPaused:YES];
 
-    for (id<GPUImageInput> currentTarget in targets)
+    NSArray *active_targets = [NSArray arrayWithArray:targets];
+    for (id<GPUImageInput> currentTarget in active_targets)
     {
         [currentTarget endProcessing];
     }
