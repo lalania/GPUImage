@@ -241,6 +241,9 @@ NSString *const kGPUImageColorSwizzlingFragmentShaderString = SHADER_STRING
     NSDictionary *sourcePixelBufferAttributesDictionary = [NSDictionary dictionaryWithObjectsAndKeys: [NSNumber numberWithInt:kCVPixelFormatType_32BGRA], kCVPixelBufferPixelFormatTypeKey,
                                                            [NSNumber numberWithInt:videoSize.width], kCVPixelBufferWidthKey,
                                                            [NSNumber numberWithInt:videoSize.height], kCVPixelBufferHeightKey,
+                                                           @{(id)kCVImageBufferColorPrimariesKey: (id)kCVImageBufferColorPrimaries_ITU_R_709_2,
+                                                             (id)kCVImageBufferYCbCrMatrixKey: (id)kCVImageBufferYCbCrMatrix_ITU_R_601_4,
+                                                             (id)kCVImageBufferTransferFunctionKey: (id)kCVImageBufferTransferFunction_ITU_R_709_2}, kCVBufferPropagatedAttachmentsKey,
                                                            nil];
 //    NSDictionary *sourcePixelBufferAttributesDictionary = [NSDictionary dictionaryWithObjectsAndKeys: [NSNumber numberWithInt:kCVPixelFormatType_32ARGB], kCVPixelBufferPixelFormatTypeKey,
 //                                                           nil];
@@ -537,86 +540,60 @@ NSString *const kGPUImageColorSwizzlingFragmentShaderString = SHADER_STRING
 
 - (void)createDataFBO;
 {
+    [self prepareDataFBO];
+}
+
+- (CVPixelBufferRef)prepareDataFBO; // TODO: khm... name doesn't correpond well with the return type
+{
     glActiveTexture(GL_TEXTURE1);
     glGenFramebuffers(1, &movieFramebuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, movieFramebuffer);
     
-    if ([GPUImageContext supportsFastTextureUpload])
-    {
-        // Code originally sourced from http://allmybrain.com/2011/12/08/rendering-to-a-texture-with-ios-5-texture-cache-api/
-        
-
-        CVPixelBufferPoolCreatePixelBuffer (NULL, [assetWriterPixelBufferInput pixelBufferPool], &renderTarget);
-
-        /* AVAssetWriter will use BT.601 conversion matrix for RGB to YCbCr conversion
-         * regardless of the kCVImageBufferYCbCrMatrixKey value.
-         * Tagging the resulting video file as BT.601, is the best option right now.
-         * Creating a proper BT.709 video is not possible at the moment.
-         */
-        CVBufferSetAttachment(renderTarget, kCVImageBufferColorPrimariesKey, kCVImageBufferColorPrimaries_ITU_R_709_2, kCVAttachmentMode_ShouldPropagate);
-        CVBufferSetAttachment(renderTarget, kCVImageBufferYCbCrMatrixKey, kCVImageBufferYCbCrMatrix_ITU_R_601_4, kCVAttachmentMode_ShouldPropagate);
-        CVBufferSetAttachment(renderTarget, kCVImageBufferTransferFunctionKey, kCVImageBufferTransferFunction_ITU_R_709_2, kCVAttachmentMode_ShouldPropagate);
-        
-        CVOpenGLESTextureCacheCreateTextureFromImage (kCFAllocatorDefault, [_movieWriterContext coreVideoTextureCache], renderTarget,
-                                                      NULL, // texture attributes
-                                                      GL_TEXTURE_2D,
-                                                      GL_RGBA, // opengl format
-                                                      (int)videoSize.width,
-                                                      (int)videoSize.height,
-                                                      GL_BGRA, // native iOS format
-                                                      GL_UNSIGNED_BYTE,
-                                                      0,
-                                                      &renderTexture);
-        
-        glBindTexture(CVOpenGLESTextureGetTarget(renderTexture), CVOpenGLESTextureGetName(renderTexture));
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CVOpenGLESTextureGetName(renderTexture), 0);
-    }
-    else
-    {
-        glGenRenderbuffers(1, &movieRenderbuffer);
-        glBindRenderbuffer(GL_RENDERBUFFER, movieRenderbuffer);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8_OES, (int)videoSize.width, (int)videoSize.height);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, movieRenderbuffer);	
-    }
+    CVPixelBufferPoolCreatePixelBuffer (NULL, [assetWriterPixelBufferInput pixelBufferPool], &renderTarget);
+    CVOpenGLESTextureCacheCreateTextureFromImage (kCFAllocatorDefault, [_movieWriterContext coreVideoTextureCache], renderTarget,
+                                                  NULL, // texture attributes
+                                                  GL_TEXTURE_2D,
+                                                  GL_RGBA, // opengl format
+                                                  (int)videoSize.width,
+                                                  (int)videoSize.height,
+                                                  GL_BGRA, // native iOS format
+                                                  GL_UNSIGNED_BYTE,
+                                                  0,
+                                                  &renderTexture);
     
-	
-	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    glBindTexture(CVOpenGLESTextureGetTarget(renderTexture), CVOpenGLESTextureGetName(renderTexture));
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CVOpenGLESTextureGetName(renderTexture), 0);
+    
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     NSAssert(status == GL_FRAMEBUFFER_COMPLETE, @"Incomplete filter FBO: %d", status);
+    
+    return renderTarget;
+}
+
+- (void)getRidOfDataFBO;
+{
+    if (renderTexture) {
+        CFRelease(renderTexture);
+        renderTexture = NULL;
+    }
+    if (renderTarget) {
+        CVPixelBufferRelease(renderTarget);
+        renderTarget = NULL;
+    }
+    if (movieFramebuffer) {
+        glDeleteFramebuffers(1, &movieFramebuffer);
+        movieFramebuffer = 0;
+    }
 }
 
 - (void)destroyDataFBO;
 {
     runSynchronouslyOnContextQueue(_movieWriterContext, ^{
         [_movieWriterContext useAsCurrentContext];
-
-        if (movieFramebuffer)
-        {
-            glDeleteFramebuffers(1, &movieFramebuffer);
-            movieFramebuffer = 0;
-        }
-        
-        if (movieRenderbuffer)
-        {
-            glDeleteRenderbuffers(1, &movieRenderbuffer);
-            movieRenderbuffer = 0;
-        }
-        
-        if ([GPUImageContext supportsFastTextureUpload])
-        {
-            if (renderTexture)
-            {
-                CFRelease(renderTexture);
-            }
-            if (renderTarget)
-            {
-                CVPixelBufferRelease(renderTarget);
-            }
-            
-        }
+        [self getRidOfDataFBO];
     });
 }
 
@@ -703,7 +680,8 @@ NSString *const kGPUImageColorSwizzlingFragmentShaderString = SHADER_STRING
     GPUImageFramebuffer *inputFramebufferForBlock = firstInputFramebuffer;
     glFinish();
 
-    runAsynchronouslyOnContextQueue(_movieWriterContext, ^{
+    runSynchronouslyOnContextQueue(_movieWriterContext, ^{
+        // TODO: make sure writer is ready for input = our renderTarget is free to be modified
         if (!assetWriterVideoInput.readyForMoreMediaData && _encodingLiveVideo)
         {
             [inputFramebufferForBlock unlock];
@@ -711,65 +689,35 @@ NSString *const kGPUImageColorSwizzlingFragmentShaderString = SHADER_STRING
             return;
         }
         
+        while (!assetWriterVideoInput.readyForMoreMediaData && !_encodingLiveVideo && !videoEncodingIsFinished) {
+            printf("....\n");
+            NSDate *maxDate = [NSDate dateWithTimeIntervalSinceNow:0.1];
+            [[NSRunLoop currentRunLoop] runUntilDate:maxDate];
+        }
+//        usleep((useconds_t)(0.1 * 1.0e6));
+        
         // Render the frame with swizzled colors, so that they can be uploaded quickly as BGRA frames
-        [_movieWriterContext useAsCurrentContext];
+//        [_movieWriterContext useAsCurrentContext]; // set inside renderAtInternalSize...:
+        CVPixelBufferRef pixelBuffer = [self prepareDataFBO];
         [self renderAtInternalSizeUsingFramebuffer:inputFramebufferForBlock];
         
-        CVPixelBufferRef pixel_buffer = NULL;
-        
-        if ([GPUImageContext supportsFastTextureUpload])
-        {
-            pixel_buffer = renderTarget;
-            CVPixelBufferLockBaseAddress(pixel_buffer, 0);
+        if(self.assetWriter.status == AVAssetWriterStatusWriting) {
+            if (![assetWriterPixelBufferInput appendPixelBuffer:pixelBuffer withPresentationTime:frameTime])
+                NSLog(@"Problem appending pixel buffer at time: %@", CFBridgingRelease(CMTimeCopyDescription(kCFAllocatorDefault, frameTime)));
         }
-        else
-        {
-            CVReturn status = CVPixelBufferPoolCreatePixelBuffer (NULL, [assetWriterPixelBufferInput pixelBufferPool], &pixel_buffer);
-            if ((pixel_buffer == NULL) || (status != kCVReturnSuccess))
-            {
-                CVPixelBufferRelease(pixel_buffer);
-                return;
-            }
-            else
-            {
-                CVPixelBufferLockBaseAddress(pixel_buffer, 0);
-                
-                GLubyte *pixelBufferData = (GLubyte *)CVPixelBufferGetBaseAddress(pixel_buffer);
-                glReadPixels(0, 0, videoSize.width, videoSize.height, GL_RGBA, GL_UNSIGNED_BYTE, pixelBufferData);
-            }
+        else {
+            NSLog(@"Couldn't write a frame");
+            //NSLog(@"Wrote a video frame: %@", CFBridgingRelease(CMTimeCopyDescription(kCFAllocatorDefault, frameTime)));
         }
+        [self getRidOfDataFBO];
+//            CVPixelBufferUnlockBaseAddress(pixel_buffer, 0);
         
-        void(^write)() = ^() {
-            while( ! assetWriterVideoInput.readyForMoreMediaData && ! _encodingLiveVideo && ! videoEncodingIsFinished ) {
-                NSDate *maxDate = [NSDate dateWithTimeIntervalSinceNow:0.1];
-                //            NSLog(@"video waiting...");
-                [[NSRunLoop currentRunLoop] runUntilDate:maxDate];
-            }
-            if (!assetWriterVideoInput.readyForMoreMediaData)
-            {
-                NSLog(@"2: Had to drop a video frame: %@", CFBridgingRelease(CMTimeCopyDescription(kCFAllocatorDefault, frameTime)));
-            }
-            else if(self.assetWriter.status == AVAssetWriterStatusWriting)
-            {
-                if (![assetWriterPixelBufferInput appendPixelBuffer:pixel_buffer withPresentationTime:frameTime])
-                    NSLog(@"Problem appending pixel buffer at time: %@", CFBridgingRelease(CMTimeCopyDescription(kCFAllocatorDefault, frameTime)));
-            }
-            else
-            {
-                NSLog(@"Couldn't write a frame (assetWriter.status: %li, err=%@)", (signed long)self.assetWriter.status, self.assetWriter.error);
-                //NSLog(@"Wrote a video frame: %@", CFBridgingRelease(CMTimeCopyDescription(kCFAllocatorDefault, frameTime)));
-            }
-            CVPixelBufferUnlockBaseAddress(pixel_buffer, 0);
-            
-            previousFrameTime = frameTime;
-            
-            if (![GPUImageContext supportsFastTextureUpload])
-            {
-                CVPixelBufferRelease(pixel_buffer);
-            }
-        };
+        previousFrameTime = frameTime;
         
-        write();
+//            if (![GPUImageContext supportsFastTextureUpload]) {
+//                CVPixelBufferRelease(pixel_buffer);
+//            }
+//        [self destroyDataFBO];
         
         [inputFramebufferForBlock unlock];
     });
