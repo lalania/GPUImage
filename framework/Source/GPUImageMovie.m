@@ -190,9 +190,14 @@
 
 - (AVAssetReader*)createAssetReader
 {
+    NSArray* videoTracks = [self.asset tracksWithMediaType:AVMediaTypeVideo];
+    if(videoTracks.count == 0){
+        // Error!!!
+        return nil;
+    }
+    
     NSError *error = nil;
     AVAssetReader *assetReader = [AVAssetReader assetReaderWithAsset:self.asset error:&error];
-
     NSMutableDictionary *outputSettings = [NSMutableDictionary dictionary];
     if ([GPUImageContext supportsFastTextureUpload]) {
         [outputSettings setObject:@(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange) forKey:(id)kCVPixelBufferPixelFormatTypeKey];
@@ -204,7 +209,7 @@
     }
     
     // Maybe set alwaysCopiesSampleData to NO on iOS 5.0 for faster video decoding
-    AVAssetReaderTrackOutput *readerVideoTrackOutput = [AVAssetReaderTrackOutput assetReaderTrackOutputWithTrack:[[self.asset tracksWithMediaType:AVMediaTypeVideo] objectAtIndex:0] outputSettings:outputSettings];
+    AVAssetReaderTrackOutput *readerVideoTrackOutput = [AVAssetReaderTrackOutput assetReaderTrackOutputWithTrack:[videoTracks objectAtIndex:0] outputSettings:outputSettings];
     readerVideoTrackOutput.alwaysCopiesSampleData = NO;
     [assetReader addOutput:readerVideoTrackOutput];
 
@@ -229,7 +234,12 @@
 - (void)processAsset
 {
     reader = [self createAssetReader];
-
+    if (!reader)
+    {
+        NSLog(@"Error creating reader from file at URL: %@", self.url);
+        return;
+    }
+    
     AVAssetReaderOutput *readerVideoTrackOutput = nil;
     AVAssetReaderOutput *readerAudioTrackOutput = nil;
 
@@ -246,7 +256,7 @@
 
     if ([reader startReading] == NO) 
     {
-            NSLog(@"Error reading from file at URL: %@", self.url);
+        NSLog(@"Error reading from file at URL: %@", self.url);
         return;
     }
 
