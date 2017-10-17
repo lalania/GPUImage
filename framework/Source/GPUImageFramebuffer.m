@@ -308,6 +308,36 @@ void dataProviderUnlockCallback (void *info, const void *data, size_t size)
     [[GPUImageContext sharedFramebufferCache] removeFramebufferFromActiveImageCaptureList:framebuffer];
 }
 
+void imageDataReleaseCallback(void *releaseRefCon, const void *baseAddress)
+{
+    free((void *)baseAddress);
+}
+
+- (CVPixelBufferRef)newCVPBFromFramebufferContentsHardcopy;
+{
+    NSAssert(self.textureOptions.internalFormat == GL_RGBA, @"For conversion to a CGImage the output texture format for this filter must be GL_RGBA.");
+    NSAssert(self.textureOptions.type == GL_UNSIGNED_BYTE, @"For conversion to a CGImage the type of the output texture of this filter must be GL_UNSIGNED_BYTE.");
+#if TARGET_IPHONE_SIMULATOR || TARGET_OS_IPHONE
+#else
+    return nil;
+#endif
+    __block CVPixelBufferRef pixel_buffer;
+    runSynchronouslyOnVideoProcessingQueue(^{
+        [GPUImageContext useImageProcessingContext];
+        
+        NSUInteger totalBytesForImage = (int)_size.width * (int)_size.height * 4;
+        // It appears that the width of a texture must be padded out to be a multiple of 8 (32 bytes) if reading from it using a texture cache
+        
+        GLubyte *rawImagePixels;
+        [self activateFramebuffer];
+        rawImagePixels = (GLubyte *)malloc(totalBytesForImage);
+        //glReadPixels(0, 0, (int)_size.width, (int)_size.height, GL_RGBA, GL_UNSIGNED_BYTE, rawImagePixels);
+        glReadPixels(0, 0, (int)_size.width, (int)_size.height, GL_BGRA, GL_UNSIGNED_BYTE, rawImagePixels);
+        CVPixelBufferCreateWithBytes(kCFAllocatorDefault, (int)_size.width, (int)_size.height, kCVPixelFormatType_32BGRA, rawImagePixels, 4 * (int)_size.width, imageDataReleaseCallback, NULL, NULL, &pixel_buffer);
+    });
+    return pixel_buffer;
+}
+
 - (CGImageRef)newCGImageFromFramebufferContents;
 {
     // a CGImage can only be created from a 'normal' color texture
