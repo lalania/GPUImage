@@ -46,6 +46,7 @@ typedef struct GPUTextureOptions {
 - (void)enableReferenceCounting;
 
 // Image capture
+- (CVPixelBufferRef)newCVPBFromFramebufferContentsHardcopy;
 - (CGImageRef)newCGImageFromFramebufferContents;
 - (void)restoreRenderTarget;
 
